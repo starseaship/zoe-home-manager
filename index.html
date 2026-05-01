@@ -673,6 +673,64 @@
     .tool-btn:active { background: var(--bg); }
     .tool-btn .t-icon { font-size: 20px; width: 28px; text-align: center; }
     .tool-btn.danger  { color: var(--high); border-color: var(--high-lt); }
+
+    /* ============================================================
+       云同步登录区（仅工具菜单内，不影响主界面布局）
+    ============================================================ */
+    .sync-panel {
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .sync-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .sync-status {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 10px;
+      word-break: break-word;
+    }
+    .sync-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .sync-row .form-input {
+      padding: 10px 12px;
+      font-size: 14px;
+      background: var(--surface);
+    }
+    .sync-mini-btn {
+      flex: 1;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 10px 8px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      cursor: pointer;
+    }
+    .sync-mini-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 700;
+    }
+    .sync-mini-btn.danger {
+      color: var(--high);
+      border-color: var(--high-lt);
+    }
+    .sync-mini-btn:active { opacity: 0.8; }
+    .hidden { display: none !important; }
+
   </style>
 
 </head>
@@ -793,6 +851,27 @@
     <div class="modal-handle"></div>
     <div class="modal-title">工具</div>
     <div class="tool-menu">
+      <div class="sync-panel">
+        <div class="sync-title">云同步</div>
+        <div class="sync-status" id="syncStatus">未连接。请先填写 HTML 里的 Supabase URL 和 Publishable key。</div>
+        <div id="authFields">
+          <input class="form-input" id="authEmail" type="email" placeholder="邮箱" autocomplete="email" style="margin-bottom:8px" />
+          <input class="form-input" id="authPassword" type="password" placeholder="密码" autocomplete="current-password" />
+          <div class="sync-row">
+            <button class="sync-mini-btn primary" id="loginBtn">登录</button>
+            <button class="sync-mini-btn" id="signupBtn">注册</button>
+          </div>
+        </div>
+        <div id="loggedFields" class="hidden">
+          <div class="sync-status" id="userStatus"></div>
+          <div class="sync-row">
+            <button class="sync-mini-btn" id="refreshCloudBtn">刷新</button>
+            <button class="sync-mini-btn" id="uploadLocalBtn">上传本地</button>
+            <button class="sync-mini-btn danger" id="logoutBtn">退出</button>
+          </div>
+        </div>
+      </div>
+
       <button class="tool-btn" id="exportBtn">
         <span class="t-icon">📤</span>
         <span>导出备份（JSON）</span>
@@ -825,24 +904,252 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ============================================================
-   数据层：localStorage CRUD
+   Supabase 配置
+   只需要填下面两行。不要填写 database password / service_role key。
+============================================================ */
+const SUPABASE_URL = 'https://tukwjlsgefvaelgzzeoq.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_cTHBMKZdhwtltb_4g1Ml4A_MKygLaOW';
+const TABLE_NAME = 'homework_tasks';
+
+/* ============================================================
+   数据层：localStorage + Supabase
 ============================================================ */
 const STORE_KEY = 'hw_planner_v1';
 
+let supabaseClient = null;
+let currentUser = null;
+let supabaseConfigured = false;
+
+function normalizePriority(p) {
+  if (p === 'high') return '高';
+  if (p === 'mid' || p === 'medium') return '中';
+  if (p === 'low') return '低';
+  return p || '高';
+}
+
+function normalizeHw(h) {
+  return {
+    id: h.id || genId(),
+    course: h.course ?? h.course_name ?? '',
+    title: h.title ?? h.task_content ?? '',
+    due: h.due ?? h.due_date ?? todayStr(),
+    time: h.time ?? h.estimated_time ?? '',
+    priority: normalizePriority(h.priority),
+    note: h.note ?? '',
+    done: Boolean(h.done ?? h.completed),
+    createdAt: h.createdAt ?? (h.created_at ? new Date(h.created_at).getTime() : Date.now())
+  };
+}
+
 function loadData() {
   try {
-    return JSON.parse(localStorage.getItem(STORE_KEY)) || [];
+    return (JSON.parse(localStorage.getItem(STORE_KEY)) || []).map(normalizeHw);
   } catch { return []; }
 }
 
 function saveData(list) {
-  localStorage.setItem(STORE_KEY, JSON.stringify(list));
+  localStorage.setItem(STORE_KEY, JSON.stringify(list.map(normalizeHw)));
 }
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function rowToHw(row) {
+  return normalizeHw({
+    id: row.id,
+    course: row.course_name,
+    title: row.task_content,
+    due: row.due_date,
+    time: row.estimated_time,
+    priority: row.priority,
+    note: row.note,
+    done: row.completed,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now()
+  });
+}
+
+function hwToRow(hw) {
+  const item = normalizeHw(hw);
+  return {
+    id: item.id,
+    user_id: currentUser?.id,
+    course_name: item.course,
+    task_content: item.title,
+    due_date: item.due,
+    estimated_time: item.time || null,
+    priority: item.priority,
+    note: item.note || '',
+    completed: !!item.done,
+    created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+
+function initSupabase() {
+  supabaseConfigured =
+    SUPABASE_URL.startsWith('https://') &&
+    !SUPABASE_URL.includes('PASTE_') &&
+    SUPABASE_ANON_KEY.length > 30 &&
+    !SUPABASE_ANON_KEY.includes('PASTE_');
+
+  if (!supabaseConfigured) {
+    updateSyncUI('未配置 Supabase。请先在 HTML 顶部填写 SUPABASE_URL 和 SUPABASE_ANON_KEY。');
+    return;
+  }
+
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+function updateSyncUI(message) {
+  const status = document.getElementById('syncStatus');
+  if (status && message) status.textContent = message;
+
+  const logged = !!currentUser;
+  const authFields = document.getElementById('authFields');
+  const loggedFields = document.getElementById('loggedFields');
+  const userStatus = document.getElementById('userStatus');
+
+  if (authFields) authFields.classList.toggle('hidden', logged);
+  if (loggedFields) loggedFields.classList.toggle('hidden', !logged);
+  if (userStatus && currentUser) userStatus.textContent = `已登录：${currentUser.email}`;
+}
+
+async function initAuth() {
+  initSupabase();
+
+  if (!supabaseConfigured) {
+    renderList();
+    return;
+  }
+
+  const { data } = await supabaseClient.auth.getSession();
+  currentUser = data.session?.user || null;
+  updateSyncUI(currentUser ? `已登录：${currentUser.email}` : '未登录。登录后可在手机和电脑之间同步。');
+
+  if (currentUser) {
+    await loadFromCloud({ afterLogin: true });
+  } else {
+    renderList();
+  }
+
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    currentUser = session?.user || null;
+    updateSyncUI(currentUser ? `已登录：${currentUser.email}` : '未登录。登录后可在手机和电脑之间同步。');
+    if (currentUser) await loadFromCloud({ afterLogin: true });
+  });
+}
+
+async function signUp() {
+  if (!supabaseConfigured) return showToast('请先填写 Supabase 配置');
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password) return showToast('请填写邮箱和密码');
+
+  const { error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) return showToast('注册失败：' + error.message);
+  showToast('注册成功。若开启邮箱验证，请先确认邮件。');
+}
+
+async function signIn() {
+  if (!supabaseConfigured) return showToast('请先填写 Supabase 配置');
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password) return showToast('请填写邮箱和密码');
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return showToast('登录失败：' + error.message);
+  currentUser = data.user;
+  updateSyncUI(`已登录：${currentUser.email}`);
+  await loadFromCloud({ afterLogin: true });
+  showToast('已登录');
+}
+
+async function signOut() {
+  if (!supabaseConfigured) return;
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  updateSyncUI('已退出登录。本地缓存仍保留。');
+  renderList();
+}
+
+async function loadFromCloud(options = {}) {
+  if (!currentUser || !supabaseClient) return;
+
+  updateSyncUI('正在读取云端数据...');
+  const localList = loadData();
+
+  const { data, error } = await supabaseClient
+    .from(TABLE_NAME)
+    .select('*')
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    updateSyncUI('读取云端失败：' + error.message);
+    showToast('读取云端失败');
+    renderList();
+    return;
+  }
+
+  const cloudList = (data || []).map(rowToHw);
+
+  if (options.afterLogin && cloudList.length === 0 && localList.length > 0) {
+    if (confirm(`云端目前没有作业数据。是否把本地 ${localList.length} 条作业上传到云端？`)) {
+      await uploadLocalToCloud(false);
+      return;
+    }
+  }
+
+  saveData(cloudList);
+  renderList();
+  updateSyncUI(`已同步：${new Date().toLocaleString()}`);
+}
+
+async function upsertToCloud(hw, silent = false) {
+  if (!currentUser || !supabaseClient) return;
+  const { error } = await supabaseClient
+    .from(TABLE_NAME)
+    .upsert(hwToRow(hw), { onConflict: 'id' });
+
+  if (error) {
+    updateSyncUI('云端保存失败：' + error.message);
+    if (!silent) showToast('云端保存失败');
+  } else {
+    updateSyncUI(`已保存到云端：${new Date().toLocaleTimeString()}`);
+  }
+}
+
+async function deleteFromCloud(id, silent = false) {
+  if (!currentUser || !supabaseClient) return;
+  const { error } = await supabaseClient
+    .from(TABLE_NAME)
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    updateSyncUI('云端删除失败：' + error.message);
+    if (!silent) showToast('云端删除失败');
+  } else {
+    updateSyncUI(`已从云端删除：${new Date().toLocaleTimeString()}`);
+  }
+}
+
+async function uploadLocalToCloud(ask = true) {
+  if (!currentUser) return showToast('请先登录');
+  const list = loadData();
+  if (list.length === 0) return showToast('本地没有可上传的数据');
+  if (ask && !confirm(`确定把本地 ${list.length} 条作业上传/覆盖到云端吗？`)) return;
+
+  updateSyncUI('正在上传本地数据...');
+  for (const hw of list) {
+    await upsertToCloud(hw, true);
+  }
+  await loadFromCloud();
+  showToast('已上传到云端');
 }
 
 /* ============================================================
@@ -986,16 +1293,16 @@ function renderList() {
   const priCardClass = { '高': 'pri-high', '中': 'pri-med', '低': 'pri-low' };
 
   container.innerHTML = filtered.map(hw => {
+    hw = normalizeHw(hw);
     const diff     = daysDiff(hw.due);
-    const today    = todayStr();
     let dueCls = 'tag-due';
     let dueLabel = formatDate(hw.due);
 
     if (!hw.done) {
-      if (diff < 0)      { dueCls += ' overdue';   dueLabel = `⚠ 逾期 ${-diff}天`; }
+      if (diff < 0)       { dueCls += ' overdue';   dueLabel = `⚠ 逾期 ${-diff}天`; }
       else if (diff === 0){ dueCls += ' due-today'; dueLabel = `🔥 今天截止`; }
       else if (diff === 1){ dueCls += ' due-soon';  dueLabel = `⏰ 明天截止`; }
-      else { dueLabel = `📅 ${formatDate(hw.due)}`; }
+      else                { dueLabel = `📅 ${formatDate(hw.due)}`; }
     } else {
       dueLabel = `📅 ${formatDate(hw.due)}`;
     }
@@ -1030,7 +1337,7 @@ function escHtml(s) {
 /* ============================================================
    事件委托：列表操作
 ============================================================ */
-document.getElementById('listContainer').addEventListener('click', e => {
+document.getElementById('listContainer').addEventListener('click', async e => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   const id = btn.dataset.id;
@@ -1039,7 +1346,12 @@ document.getElementById('listContainer').addEventListener('click', e => {
   if (action === 'toggle') {
     const list = loadData();
     const hw   = list.find(h => h.id === id);
-    if (hw) { hw.done = !hw.done; saveData(list); renderList(); }
+    if (hw) {
+      hw.done = !hw.done;
+      saveData(list);
+      renderList();
+      await upsertToCloud(hw);
+    }
   }
 
   if (action === 'edit') {
@@ -1047,10 +1359,11 @@ document.getElementById('listContainer').addEventListener('click', e => {
   }
 
   if (action === 'delete') {
-    showConfirm('删除作业', '确定要删除这项作业吗？此操作不可撤销。', '确认删除', () => {
+    showConfirm('删除作业', '确定要删除这项作业吗？此操作不可撤销。', '确认删除', async () => {
       const list = loadData().filter(h => h.id !== id);
       saveData(list);
       renderList();
+      await deleteFromCloud(id);
       showToast('已删除');
     });
   }
@@ -1134,7 +1447,7 @@ document.querySelectorAll('.pri-option').forEach(el => {
 });
 
 // 提交
-document.getElementById('formSubmitBtn').addEventListener('click', () => {
+document.getElementById('formSubmitBtn').addEventListener('click', async () => {
   const course = document.getElementById('f-course').value.trim();
   const title  = document.getElementById('f-title').value.trim();
   const due    = document.getElementById('f-due').value;
@@ -1147,6 +1460,7 @@ document.getElementById('formSubmitBtn').addEventListener('click', () => {
   }
 
   const list = loadData();
+  let changedItem = null;
 
   if (editingId) {
     const hw = list.find(h => h.id === editingId);
@@ -1157,23 +1471,26 @@ document.getElementById('formSubmitBtn').addEventListener('click', () => {
       hw.time     = time;
       hw.note     = note;
       hw.priority = selectedPri;
+      changedItem = hw;
     }
     saveData(list);
     showToast('已保存');
   } else {
-    list.push({
+    changedItem = {
       id: genId(),
       course, title, due, time, note,
       priority: selectedPri,
       done: false,
       createdAt: Date.now()
-    });
+    };
+    list.push(changedItem);
     saveData(list);
     showToast('已新增');
   }
 
   closeForm();
   renderList();
+  if (changedItem) await upsertToCloud(changedItem);
 });
 
 // 点击遮罩关闭
@@ -1195,6 +1512,12 @@ document.getElementById('toolBtn').addEventListener('click', openToolMenu);
 document.getElementById('toolOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('toolOverlay')) closeToolMenu();
 });
+
+document.getElementById('loginBtn').addEventListener('click', signIn);
+document.getElementById('signupBtn').addEventListener('click', signUp);
+document.getElementById('logoutBtn').addEventListener('click', signOut);
+document.getElementById('refreshCloudBtn').addEventListener('click', () => loadFromCloud());
+document.getElementById('uploadLocalBtn').addEventListener('click', () => uploadLocalToCloud(true));
 
 // 导出
 document.getElementById('exportBtn').addEventListener('click', () => {
@@ -1223,9 +1546,12 @@ document.getElementById('import-input').addEventListener('change', e => {
     try {
       const data = JSON.parse(ev.target.result);
       if (!Array.isArray(data)) throw new Error();
-      showConfirm('导入备份', `将导入 ${data.length} 条作业数据，这将覆盖当前所有数据，确认继续？`, '确认导入', () => {
-        saveData(data);
+      showConfirm('导入备份', `将导入 ${data.length} 条作业数据，这将覆盖当前所有数据，确认继续？`, '确认导入', async () => {
+        saveData(data.map(normalizeHw));
         renderList();
+        if (currentUser && confirm('是否把导入的数据同步到云端？')) {
+          await uploadLocalToCloud(false);
+        }
         closeToolMenu();
         showToast(`已导入 ${data.length} 条作业`);
       });
@@ -1239,11 +1565,13 @@ document.getElementById('import-input').addEventListener('change', e => {
 
 // 清除已完成
 document.getElementById('clearDoneBtn').addEventListener('click', () => {
-  const count = loadData().filter(h => h.done).length;
+  const doneList = loadData().filter(h => h.done);
+  const count = doneList.length;
   if (count === 0) { showToast('没有已完成的作业'); return; }
-  showConfirm('清除已完成作业', `将删除全部 ${count} 条已完成的作业，此操作不可撤销。`, '全部清除', () => {
+  showConfirm('清除已完成作业', `将删除全部 ${count} 条已完成的作业，此操作不可撤销。`, '全部清除', async () => {
     saveData(loadData().filter(h => !h.done));
     renderList();
+    for (const hw of doneList) await deleteFromCloud(hw.id, true);
     closeToolMenu();
     showToast(`已清除 ${count} 条作业`);
   });
@@ -1267,9 +1595,9 @@ document.getElementById('confirmCancel').addEventListener('click', () => {
   _confirmCb = null;
 });
 
-document.getElementById('confirmOk').addEventListener('click', () => {
+document.getElementById('confirmOk').addEventListener('click', async () => {
   document.getElementById('confirmOverlay').classList.remove('show');
-  if (_confirmCb) { _confirmCb(); _confirmCb = null; }
+  if (_confirmCb) { await _confirmCb(); _confirmCb = null; }
 });
 
 /* ============================================================
@@ -1286,9 +1614,18 @@ function showToast(msg) {
 }
 
 /* ============================================================
+   iPhone Safari 后台保存保护
+============================================================ */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveData(loadData());
+});
+window.addEventListener('pagehide', () => saveData(loadData()));
+window.addEventListener('beforeunload', () => saveData(loadData()));
+
+/* ============================================================
    初始化
 ============================================================ */
-renderList();
+initAuth();
 </script>
 
 </body>
