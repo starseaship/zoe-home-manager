@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Homework Planner</title>
+
+  <style>
+    /* ============================================================
+       CSS 变量 & 重置
+    ============================================================ */
+    :root {
+      --bg:        #F5F3EE;
+      --surface:   #FFFFFF;
+      --border:    #E2DDD6;
+      --text:      #2C2825;
+      --muted:     #8C8680;
+      --accent:    #4A7C6F;      /* 深绿 */
+      --accent-lt: #D4EAE4;
+      --high:      #C94B3A;      /* 高优先级 */
+      --high-lt:   #FAE8E5;
+      --med:       #D97B2A;      /* 中优先级 */
+      --med-lt:    #FDF0E0;
+      --low:       #5B85B5;      /* 低优先级 */
+      --low-lt:    #E5EDF7;
+      --warn:      #C94B3A;
+      --warn-lt:   #FAE8E5;
+      --soon:      #D97B2A;
+      --soon-lt:   #FDF0E0;
+      --done-text: #B0AAA3;
+      --radius:    14px;
+      --shadow:    0 2px 12px rgba(44,40,37,0.08);
+      --font-body: 'Georgia', 'Songti SC', serif;
+      --font-ui:   -apple-system, 'Helvetica Neue', sans-serif;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+
+    /* ============================================================
+       顶部 Header
+    ============================================================ */
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .app-title {
+      font-family: var(--font-body);
+      font-size: 22px;
+      font-weight: bold;
+      letter-spacing: -0.3px;
+      color: var(--text);
+    }
+
+    .app-title span {
+      color: var(--accent);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .icon-btn:active { background: var(--border); }
+
+    /* ============================================================
+       统计栏
+    ============================================================ */
+    .stats-bar {
+      display: flex;
+      gap: 10px;
+      padding: 14px 20px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .stats-bar::-webkit-scrollbar { display: none; }
+
+    .stat-chip {
+      flex-shrink: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .stat-chip strong {
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    /* ============================================================
+       筛选标签
+    ============================================================ */
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      padding: 0 20px 14px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .filter-bar::-webkit-scrollbar { display: none; }
+
+    .filter-btn {
+      flex-shrink: 0;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      border-radius: 20px;
+      padding: 7px 15px;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: var(--font-ui);
+    }
+
+    .filter-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .filter-btn:active { opacity: 0.8; }
+
+    /* ============================================================
+       作业列表
+    ============================================================ */
+    .list-container {
+      padding: 0 16px;
+      padding-bottom: calc(100px + var(--safe-bottom));
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 4px 6px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state .emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    .empty-state p { font-size: 15px; line-height: 1.5; }
+
+    /* ============================================================
+       作业卡片
+    ============================================================ */
+    .hw-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: opacity 0.2s, transform 0.15s;
+      position: relative;
+    }
+
+    .hw-card.done {
+      opacity: 0.55;
+    }
+
+    /* 左侧优先级色条 */
+    .hw-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      border-radius: var(--radius) 0 0 var(--radius);
+    }
+    .hw-card.pri-high::before  { background: var(--high); }
+    .hw-card.pri-med::before   { background: var(--med); }
+    .hw-card.pri-low::before   { background: var(--low); }
+
+    .card-main {
+      display: flex;
+      align-items: flex-start;
+      padding: 14px 14px 14px 18px;
+      gap: 12px;
+    }
+
+    /* 完成勾选圆圈 */
+    .check-circle {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      margin-top: 1px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      background: transparent;
+    }
+    .check-circle.checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .check-circle.checked::after {
+      content: '✓';
+      color: #fff;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .card-body { flex: 1; min-width: 0; }
+
+    .card-course {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.3px;
+      margin-bottom: 3px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+
+    .done .card-title {
+      text-decoration: line-through;
+      color: var(--done-text);
+    }
+
+    .card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .meta-tag {
+      font-size: 12px;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-weight: 500;
+    }
+
+    .tag-due { background: var(--bg); color: var(--muted); }
+    .tag-due.overdue  { background: var(--warn-lt); color: var(--warn); }
+    .tag-due.due-today { background: var(--warn-lt); color: var(--warn); font-weight: 700; }
+    .tag-due.due-soon  { background: var(--soon-lt); color: var(--soon); }
+
+    .tag-time { background: var(--bg); color: var(--muted); }
+
+    .tag-pri {
+      font-size: 11px;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-weight: 700;
+    }
+    .tag-pri.pri-high { background: var(--high-lt); color: var(--high); }
+    .tag-pri.pri-med  { background: var(--med-lt); color: var(--med); }
+    .tag-pri.pri-low  { background: var(--low-lt); color: var(--low); }
+
+    .card-note {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 6px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .card-actions {
+      display: flex;
+      border-top: 1px solid var(--border);
+    }
+
+    .card-action-btn {
+      flex: 1;
+      border: none;
+      background: none;
+      padding: 11px 0;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: var(--font-ui);
+      transition: background 0.1s;
+    }
+    .card-action-btn:first-child { border-right: 1px solid var(--border); }
+    .card-action-btn:active { background: var(--bg); }
+    .card-action-btn.del { color: var(--warn); }
+
+    /* ============================================================
+       浮动新增按钮
+    ============================================================ */
+    .fab {
+      position: fixed;
+      bottom: calc(24px + var(--safe-bottom));
+      right: 22px;
+      z-index: 200;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(74,124,111,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .fab:active {
+      transform: scale(0.93);
+      box-shadow: 0 2px 10px rgba(74,124,111,0.3);
+    }
+
+    /* ============================================================
+       模态框通用
+    ============================================================ */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      background: rgba(44,40,37,0.45);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+    .overlay.show { display: flex; align-items: flex-end; justify-content: center; }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      width: 100%;
+      max-width: 540px;
+      max-height: 92dvh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: calc(24px + var(--safe-bottom));
+      animation: slideUp 0.28s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(60px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    .modal-handle {
+      width: 36px; height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      margin: 12px auto 0;
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      padding: 14px 20px 10px;
+      color: var(--text);
+    }
+
+    /* ============================================================
+       表单
+    ============================================================ */
+    .form-group {
+      padding: 0 20px 14px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+      letter-spacing: 0.2px;
+    }
+
+    .form-input, .form-textarea, .form-select {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 15px;
+      font-family: var(--font-ui);
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      -webkit-appearance: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus,
+    .form-textarea:focus,
+    .form-select:focus {
+      border-color: var(--accent);
+      background: var(--surface);
+    }
+
+    .form-textarea {
+      resize: none;
+      height: 80px;
+      line-height: 1.5;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 0 20px 14px;
+    }
+
+    .form-row .form-group { padding: 0; }
+
+    /* 优先级选择器 */
+    .pri-selector {
+      display: flex;
+      gap: 8px;
+      padding: 0 20px 14px;
+    }
+
+    .pri-option {
+      flex: 1;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 0;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: var(--surface);
+      color: var(--muted);
+    }
+
+    .pri-option[data-val="高"].selected { background: var(--high-lt); border-color: var(--high); color: var(--high); }
+    .pri-option[data-val="中"].selected { background: var(--med-lt); border-color: var(--med); color: var(--med); }
+    .pri-option[data-val="低"].selected { background: var(--low-lt); border-color: var(--low); color: var(--low); }
+
+    .form-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 20px 14px;
+    }
+
+    .btn-primary {
+      display: block;
+      width: calc(100% - 40px);
+      margin: 4px 20px 0;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: var(--font-ui);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:active { opacity: 0.85; }
+
+    .btn-danger {
+      background: var(--high);
+    }
+
+    /* ============================================================
+       确认弹窗
+    ============================================================ */
+    .confirm-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: rgba(44,40,37,0.5);
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .confirm-overlay.show { display: flex; }
+
+    .confirm-box {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 24px 20px 16px;
+      width: 100%;
+      max-width: 320px;
+      text-align: center;
+      animation: popIn 0.2s ease;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.92); opacity: 0; }
+      to   { transform: scale(1);    opacity: 1; }
+    }
+
+    .confirm-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .confirm-msg   { font-size: 14px; color: var(--muted); line-height: 1.5; margin-bottom: 20px; }
+
+    .confirm-btns {
+      display: flex;
+      gap: 10px;
+    }
+
+    .confirm-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--font-ui);
+    }
+
+    .confirm-btn.cancel  { background: var(--bg); color: var(--muted); }
+    .confirm-btn.confirm { background: var(--high); color: #fff; }
+    .confirm-btn:active  { opacity: 0.8; }
+
+    /* ============================================================
+       Toast 提示
+    ============================================================ */
+    .toast {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-8px);
+      background: var(--text);
+      color: #fff;
+      border-radius: 20px;
+      padding: 10px 20px;
+      font-size: 14px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 999;
+      transition: opacity 0.2s, transform 0.2s;
+      white-space: nowrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ============================================================
+       排序栏
+    ============================================================ */
+    .sort-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 20px 14px;
+    }
+
+    .sort-label {
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .sort-select {
+      flex: 1;
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-family: var(--font-ui);
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+      /* 自定义下拉箭头 */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238C8680' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+
+    .sort-dir-btn {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border: 1.5px solid var(--border);
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .sort-dir-btn:active { background: var(--bg); }
+    .sort-dir-btn.asc  { color: var(--accent); border-color: var(--accent); }
+    .sort-dir-btn.desc { color: var(--accent); border-color: var(--accent); }
+
+    /* ============================================================
+       隐藏的 file input
+    ============================================================ */
+    #import-input { display: none; }
+
+    /* ============================================================
+       工具菜单模态框
+    ============================================================ */
+    .tool-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 4px 20px 0;
+    }
+
+    .tool-btn {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      padding: 14px 16px;
+      font-size: 15px;
+      font-family: var(--font-ui);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s;
+      text-align: left;
+    }
+    .tool-btn:active { background: var(--bg); }
+    .tool-btn .t-icon { font-size: 20px; width: 28px; text-align: center; }
+    .tool-btn.danger  { color: var(--high); border-color: var(--high-lt); }
+  </style>
+
+</head>
+<body>
+
+<!-- ============================================================
+     顶部 Header
+============================================================ -->
+
+<header class="app-header">
+  <div class="app-title">作业<span>计划</span></div>
+  <div class="header-actions">
+    <button class="icon-btn" id="toolBtn" title="工具">⚙️</button>
+    <button class="icon-btn" id="addBtnHeader" title="新增">＋</button>
+  </div>
+</header>
+
+<!-- 统计栏 -->
+
+<div class="stats-bar" id="statsBar"></div>
+
+<!-- 筛选栏 -->
+
+<div class="filter-bar" id="filterBar">
+  <button class="filter-btn active" data-filter="all">全部</button>
+  <button class="filter-btn" data-filter="pending">未完成</button>
+  <button class="filter-btn" data-filter="done">已完成</button>
+  <button class="filter-btn" data-filter="today">今天截止</button>
+  <button class="filter-btn" data-filter="3days">3天内</button>
+  <button class="filter-btn" data-filter="week">本周</button>
+</div>
+
+<!-- 排序栏 -->
+
+<div class="sort-bar">
+  <span class="sort-label">排序：</span>
+  <select class="sort-select" id="sortSelect">
+    <option value="due">截止日期</option>
+    <option value="time">预计耗时</option>
+    <option value="priority">优先级</option>
+    <option value="created">创建时间</option>
+  </select>
+  <button class="sort-dir-btn asc" id="sortDirBtn" title="切换升序/降序">↑</button>
+</div>
+
+<!-- 作业列表 -->
+
+<main class="list-container" id="listContainer"></main>
+
+<!-- 浮动新增按钮 -->
+
+<button class="fab" id="fabBtn">＋</button>
+
+<!-- Toast -->
+
+<div class="toast" id="toast"></div>
+
+<!-- 隐藏 file input（导入用） -->
+
+<input type="file" id="import-input" accept=".json" />
+
+<!-- ============================================================
+     新增 / 编辑 模态框
+============================================================ -->
+
+<div class="overlay" id="formOverlay">
+  <div class="modal" id="formModal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="formTitle">新增作业</div>
+
+<div class="form-group">
+  <label class="form-label">课程名 *</label>
+  <input class="form-input" id="f-course" placeholder="例：线性代数" maxlength="30" />
+</div>
+
+<div class="form-group">
+  <label class="form-label">作业内容 *</label>
+  <input class="form-input" id="f-title" placeholder="例：第三章课后习题 1–20" maxlength="80" />
+</div>
+
+<div class="form-row">
+  <div class="form-group">
+    <label class="form-label">截止日期 *</label>
+    <input class="form-input" type="date" id="f-due" />
+  </div>
+  <div class="form-group">
+    <label class="form-label">预计耗时（小时）</label>
+    <input class="form-input" type="number" id="f-time" placeholder="例：2" min="0.5" max="99" step="0.5" />
+  </div>
+</div>
+
+<div class="form-group" style="padding-bottom:6px">
+  <label class="form-label">优先级</label>
+</div>
+<div class="pri-selector">
+  <div class="pri-option selected" data-val="高">🔴 高</div>
+  <div class="pri-option" data-val="中">🟡 中</div>
+  <div class="pri-option" data-val="低">🔵 低</div>
+</div>
+
+<div class="form-group">
+  <label class="form-label">备注</label>
+  <textarea class="form-textarea" id="f-note" placeholder="可选，比如参考书、提交方式等"></textarea>
+</div>
+
+<div class="form-divider"></div>
+<button class="btn-primary" id="formSubmitBtn">保存作业</button>
+
+  </div>
+</div>
+
+<!-- ============================================================
+     工具菜单模态框
+============================================================ -->
+
+<div class="overlay" id="toolOverlay">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">工具</div>
+    <div class="tool-menu">
+      <button class="tool-btn" id="exportBtn">
+        <span class="t-icon">📤</span>
+        <span>导出备份（JSON）</span>
+      </button>
+      <button class="tool-btn" id="importTriggerBtn">
+        <span class="t-icon">📥</span>
+        <span>导入备份（JSON）</span>
+      </button>
+      <button class="tool-btn danger" id="clearDoneBtn">
+        <span class="t-icon">🗑</span>
+        <span>清除全部已完成作业</span>
+      </button>
+    </div>
+    <div style="height:20px"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     确认弹窗
+============================================================ -->
+
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirmTitle">确认操作</div>
+    <div class="confirm-msg" id="confirmMsg">此操作不可撤销，确认继续？</div>
+    <div class="confirm-btns">
+      <button class="confirm-btn cancel" id="confirmCancel">取消</button>
+      <button class="confirm-btn confirm" id="confirmOk">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   数据层：localStorage CRUD
+============================================================ */
+const STORE_KEY = 'hw_planner_v1';
+
+function loadData() {
+  try {
+    return JSON.parse(localStorage.getItem(STORE_KEY)) || [];
+  } catch { return []; }
+}
+
+function saveData(list) {
+  localStorage.setItem(STORE_KEY, JSON.stringify(list));
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+/* ============================================================
+   日期工具
+============================================================ */
+function todayStr() {
+  // YYYY-MM-DD in local time
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function daysDiff(dueStr) {
+  // positive = future, negative = overdue
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due   = new Date(dueStr + 'T00:00:00');
+  return Math.round((due - today) / 86400000);
+}
+
+function formatDate(dueStr) {
+  const [y, m, d] = dueStr.split('-');
+  return `${m}月${d}日`;
+}
+
+function endOfWeekStr() {
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun
+  const toSun = day === 0 ? 0 : 7 - day;
+  d.setDate(d.getDate() + toSun);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+/* ============================================================
+   渲染逻辑
+============================================================ */
+let currentFilter = 'all';
+let currentSort   = 'due';   // due | time | priority | created
+let sortAsc       = true;
+
+// 优先级数值映射（高=0 最紧急，排最前）
+const PRI_ORDER = { '高': 0, '中': 1, '低': 2 };
+
+function parseHours(val) {
+  // 兼容旧数据（可能是文字如"2小时"）和新数据（数字字符串）
+  const n = parseFloat(val);
+  return isNaN(n) ? Infinity : n;
+}
+
+function getFilteredList(list) {
+  const today = todayStr();
+  const eow   = endOfWeekStr();
+
+  switch (currentFilter) {
+    case 'pending': return list.filter(h => !h.done);
+    case 'done':    return list.filter(h => h.done);
+    case 'today':   return list.filter(h => h.due === today && !h.done);
+    case '3days':
+      return list.filter(h => {
+        const d = daysDiff(h.due);
+        return d >= 0 && d <= 2 && !h.done;
+      });
+    case 'week':
+      return list.filter(h => h.due <= eow && !h.done);
+    default:        return list;
+  }
+}
+
+function renderStats(list) {
+  const total    = list.length;
+  const pending  = list.filter(h => !h.done).length;
+  const done     = list.filter(h => h.done).length;
+  const today    = list.filter(h => h.due === todayStr() && !h.done).length;
+  const overdue  = list.filter(h => daysDiff(h.due) < 0 && !h.done).length;
+
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat-chip">共 <strong>${total}</strong> 项</div>
+    <div class="stat-chip">待完成 <strong>${pending}</strong></div>
+    <div class="stat-chip">已完成 <strong>${done}</strong></div>
+    ${today  ? `<div class="stat-chip" style="background:#FAE8E5;border-color:#F5C9C2;color:#C94B3A">今天截止 <strong>${today}</strong></div>` : ''}
+    ${overdue ? `<div class="stat-chip" style="background:#FAE8E5;border-color:#F5C9C2;color:#C94B3A">已逾期 <strong>${overdue}</strong></div>` : ''}
+  `;
+}
+
+function renderList() {
+  const list     = loadData();
+  const filtered = getFilteredList(list);
+  const container = document.getElementById('listContainer');
+
+  renderStats(list);
+
+  if (filtered.length === 0) {
+    const msgs = {
+      all:    ['📭', '还没有作业，真好～'],
+      pending:['✅', '没有未完成的作业！'],
+      done:   ['🌱', '还没有完成的作业'],
+      today:  ['🌤', '今天没有截止的作业'],
+      '3days':['😊', '3天内没有截止的作业'],
+      week:   ['🎉', '本周没有截止的作业'],
+    };
+    const [e, t] = msgs[currentFilter] || msgs.all;
+    container.innerHTML = `<div class="empty-state"><span class="emoji">${e}</span><p>${t}</p></div>`;
+    return;
+  }
+
+  // 排序：未完成永远在前，done 在后；内部再按所选字段排
+  filtered.sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+
+    let va, vb;
+    switch (currentSort) {
+      case 'time':
+        va = parseHours(a.time);
+        vb = parseHours(b.time);
+        // 没填耗时的永远排最后
+        if (va === Infinity && vb === Infinity) return 0;
+        if (va === Infinity) return 1;
+        if (vb === Infinity) return -1;
+        break;
+      case 'priority':
+        va = PRI_ORDER[a.priority] ?? 1;
+        vb = PRI_ORDER[b.priority] ?? 1;
+        break;
+      case 'created':
+        va = a.createdAt || 0;
+        vb = b.createdAt || 0;
+        break;
+      default: // due
+        va = a.due;
+        vb = b.due;
+        break;
+    }
+
+    if (va < vb) return sortAsc ? -1 : 1;
+    if (va > vb) return sortAsc ?  1 : -1;
+    // 次级排序：截止日期
+    return a.due.localeCompare(b.due);
+  });
+
+  // 优先级标签
+  const priLabel = { '高': '高', '中': '中', '低': '低' };
+  const priClass = { '高': 'pri-high', '中': 'pri-med', '低': 'pri-low' };
+  const priCardClass = { '高': 'pri-high', '中': 'pri-med', '低': 'pri-low' };
+
+  container.innerHTML = filtered.map(hw => {
+    const diff     = daysDiff(hw.due);
+    const today    = todayStr();
+    let dueCls = 'tag-due';
+    let dueLabel = formatDate(hw.due);
+
+    if (!hw.done) {
+      if (diff < 0)      { dueCls += ' overdue';   dueLabel = `⚠ 逾期 ${-diff}天`; }
+      else if (diff === 0){ dueCls += ' due-today'; dueLabel = `🔥 今天截止`; }
+      else if (diff === 1){ dueCls += ' due-soon';  dueLabel = `⏰ 明天截止`; }
+      else { dueLabel = `📅 ${formatDate(hw.due)}`; }
+    } else {
+      dueLabel = `📅 ${formatDate(hw.due)}`;
+    }
+
+    return `
+    <div class="hw-card ${hw.done ? 'done' : ''} ${priCardClass[hw.priority] || ''}" data-id="${hw.id}">
+      <div class="card-main">
+        <div class="check-circle ${hw.done ? 'checked' : ''}" data-action="toggle" data-id="${hw.id}"></div>
+        <div class="card-body">
+          <div class="card-course">${escHtml(hw.course)}</div>
+          <div class="card-title">${escHtml(hw.title)}</div>
+          <div class="card-meta">
+            <span class="meta-tag ${dueCls}">${dueLabel}</span>
+            ${hw.time ? `<span class="meta-tag tag-time">🕐 ${parseHours(hw.time) === Infinity ? escHtml(hw.time) : parseHours(hw.time) + '小时'}</span>` : ''}
+            <span class="meta-tag tag-pri ${priClass[hw.priority] || ''}">${hw.priority}</span>
+          </div>
+          ${hw.note ? `<div class="card-note">${escHtml(hw.note)}</div>` : ''}
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="card-action-btn" data-action="edit" data-id="${hw.id}">✏️ 编辑</button>
+        <button class="card-action-btn del" data-action="delete" data-id="${hw.id}">🗑 删除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ============================================================
+   事件委托：列表操作
+============================================================ */
+document.getElementById('listContainer').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+
+  if (action === 'toggle') {
+    const list = loadData();
+    const hw   = list.find(h => h.id === id);
+    if (hw) { hw.done = !hw.done; saveData(list); renderList(); }
+  }
+
+  if (action === 'edit') {
+    openEditForm(id);
+  }
+
+  if (action === 'delete') {
+    showConfirm('删除作业', '确定要删除这项作业吗？此操作不可撤销。', '确认删除', () => {
+      const list = loadData().filter(h => h.id !== id);
+      saveData(list);
+      renderList();
+      showToast('已删除');
+    });
+  }
+});
+
+/* ============================================================
+   排序控件
+============================================================ */
+document.getElementById('sortSelect').addEventListener('change', e => {
+  currentSort = e.target.value;
+  renderList();
+});
+
+document.getElementById('sortDirBtn').addEventListener('click', () => {
+  sortAsc = !sortAsc;
+  const btn = document.getElementById('sortDirBtn');
+  btn.textContent = sortAsc ? '↑' : '↓';
+  btn.className   = 'sort-dir-btn ' + (sortAsc ? 'asc' : 'desc');
+  renderList();
+});
+
+/* ============================================================
+   筛选按钮
+============================================================ */
+document.getElementById('filterBar').addEventListener('click', e => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentFilter = btn.dataset.filter;
+  renderList();
+});
+
+/* ============================================================
+   新增 / 编辑 表单
+============================================================ */
+let editingId = null;
+let selectedPri = '高';
+
+function openAddForm() {
+  editingId = null;
+  document.getElementById('formTitle').textContent = '新增作业';
+  document.getElementById('f-course').value = '';
+  document.getElementById('f-title').value  = '';
+  document.getElementById('f-due').value    = todayStr();
+  document.getElementById('f-time').value   = '';
+  document.getElementById('f-note').value   = '';
+  setPri('高');
+  document.getElementById('formOverlay').classList.add('show');
+  setTimeout(() => document.getElementById('f-course').focus(), 300);
+}
+
+function openEditForm(id) {
+  const hw = loadData().find(h => h.id === id);
+  if (!hw) return;
+  editingId = id;
+  document.getElementById('formTitle').textContent = '编辑作业';
+  document.getElementById('f-course').value = hw.course;
+  document.getElementById('f-title').value  = hw.title;
+  document.getElementById('f-due').value    = hw.due;
+  document.getElementById('f-time').value   = hw.time || '';
+  document.getElementById('f-note').value   = hw.note || '';
+  setPri(hw.priority || '高');
+  document.getElementById('formOverlay').classList.add('show');
+}
+
+function closeForm() {
+  document.getElementById('formOverlay').classList.remove('show');
+}
+
+function setPri(val) {
+  selectedPri = val;
+  document.querySelectorAll('.pri-option').forEach(el => {
+    el.classList.toggle('selected', el.dataset.val === val);
+  });
+}
+
+// 优先级选择
+document.querySelectorAll('.pri-option').forEach(el => {
+  el.addEventListener('click', () => setPri(el.dataset.val));
+});
+
+// 提交
+document.getElementById('formSubmitBtn').addEventListener('click', () => {
+  const course = document.getElementById('f-course').value.trim();
+  const title  = document.getElementById('f-title').value.trim();
+  const due    = document.getElementById('f-due').value;
+  const time   = document.getElementById('f-time').value.trim();
+  const note   = document.getElementById('f-note').value.trim();
+
+  if (!course || !title || !due) {
+    showToast('请填写课程名、作业内容和截止日期');
+    return;
+  }
+
+  const list = loadData();
+
+  if (editingId) {
+    const hw = list.find(h => h.id === editingId);
+    if (hw) {
+      hw.course   = course;
+      hw.title    = title;
+      hw.due      = due;
+      hw.time     = time;
+      hw.note     = note;
+      hw.priority = selectedPri;
+    }
+    saveData(list);
+    showToast('已保存');
+  } else {
+    list.push({
+      id: genId(),
+      course, title, due, time, note,
+      priority: selectedPri,
+      done: false,
+      createdAt: Date.now()
+    });
+    saveData(list);
+    showToast('已新增');
+  }
+
+  closeForm();
+  renderList();
+});
+
+// 点击遮罩关闭
+document.getElementById('formOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('formOverlay')) closeForm();
+});
+
+// FAB & header 新增按钮
+document.getElementById('fabBtn').addEventListener('click', openAddForm);
+document.getElementById('addBtnHeader').addEventListener('click', openAddForm);
+
+/* ============================================================
+   工具菜单
+============================================================ */
+function openToolMenu()  { document.getElementById('toolOverlay').classList.add('show'); }
+function closeToolMenu() { document.getElementById('toolOverlay').classList.remove('show'); }
+
+document.getElementById('toolBtn').addEventListener('click', openToolMenu);
+document.getElementById('toolOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('toolOverlay')) closeToolMenu();
+});
+
+// 导出
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const list = loadData();
+  const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `homework_backup_${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  closeToolMenu();
+  showToast('已导出备份');
+});
+
+// 导入
+document.getElementById('importTriggerBtn').addEventListener('click', () => {
+  document.getElementById('import-input').click();
+});
+
+document.getElementById('import-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!Array.isArray(data)) throw new Error();
+      showConfirm('导入备份', `将导入 ${data.length} 条作业数据，这将覆盖当前所有数据，确认继续？`, '确认导入', () => {
+        saveData(data);
+        renderList();
+        closeToolMenu();
+        showToast(`已导入 ${data.length} 条作业`);
+      });
+    } catch {
+      showToast('文件格式错误，请选择正确的 JSON 备份文件');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+// 清除已完成
+document.getElementById('clearDoneBtn').addEventListener('click', () => {
+  const count = loadData().filter(h => h.done).length;
+  if (count === 0) { showToast('没有已完成的作业'); return; }
+  showConfirm('清除已完成作业', `将删除全部 ${count} 条已完成的作业，此操作不可撤销。`, '全部清除', () => {
+    saveData(loadData().filter(h => !h.done));
+    renderList();
+    closeToolMenu();
+    showToast(`已清除 ${count} 条作业`);
+  });
+});
+
+/* ============================================================
+   确认弹窗
+============================================================ */
+let _confirmCb = null;
+
+function showConfirm(title, msg, okLabel, cb) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent   = msg;
+  document.getElementById('confirmOk').textContent    = okLabel;
+  _confirmCb = cb;
+  document.getElementById('confirmOverlay').classList.add('show');
+}
+
+document.getElementById('confirmCancel').addEventListener('click', () => {
+  document.getElementById('confirmOverlay').classList.remove('show');
+  _confirmCb = null;
+});
+
+document.getElementById('confirmOk').addEventListener('click', () => {
+  document.getElementById('confirmOverlay').classList.remove('show');
+  if (_confirmCb) { _confirmCb(); _confirmCb = null; }
+});
+
+/* ============================================================
+   Toast 提示
+============================================================ */
+let _toastTimer = null;
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ============================================================
+   初始化
+============================================================ */
+renderList();
+</script>
+
+</body>
+</html>
